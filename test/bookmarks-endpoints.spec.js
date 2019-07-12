@@ -55,7 +55,7 @@ describe.only('Bookmarks Endpoints', function () {
         return supertest(app)
           .get(`/bookmarks/${bookmarkId}`)
           .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
-          .expect(404, { error: { message: `Bookmark does not exist` } })
+          .expect(404, { error: { message: `Bookmark doesn't exist` } })
       })
     });
 
@@ -86,7 +86,7 @@ describe.only('Bookmarks Endpoints', function () {
         title: 'Optimizing Google Fonts Performance',
         url: 'https://www.smashingmagazine.com/2019/06/designing-ar-apps-guide/',
         description: 'This is a test description',
-        rating: 4.5
+        rating: '4.5'
       }
 
       return supertest(app)
@@ -113,7 +113,7 @@ describe.only('Bookmarks Endpoints', function () {
       const newBookmark = {
         title: 'Google',
         url: 'http://www.google.com',
-        rating: 4.1
+        rating: '4.1'
       }
       it(`responds with 400 and an error message when the '${field}' is missing`, () => {
         delete newBookmark[field]
@@ -131,7 +131,7 @@ describe.only('Bookmarks Endpoints', function () {
         const maliciousBookmark = {
           title: 'Naughty naughty very naughty <script>alert("pwned");</script>',
           url: 'https://hack-you.com <script>alert("i haxd you");</script>',
-          rating: 4.2,
+          rating: '4.2',
           description: `Bad image <img src="https://url.to.file.which/does-not.exist" onerror="alert(document.cookie);">. But not <strong>all</strong> bad.`
         }
         return supertest(app)
@@ -146,4 +146,29 @@ describe.only('Bookmarks Endpoints', function () {
       })
     })
   })
-});
+
+  describe(`DELETE /bookmarks/:bookmark_id`, () => {
+    context('Given there are bookmarks in the database', () => {
+      const testBookmarks = makeBookmarksArray();
+
+      beforeEach('insert bookmarks', () => {
+        return db
+          .into('bookmarks_list')
+          .insert(testBookmarks)
+      })
+
+      it('responds with 204 and removes the bookmark', () => {
+        const idToRemove = 2
+        const expectedBookmarks = testBookmarks.filter(bookmark => bookmark.id !== idToRemove)
+        return supertest(app)
+          .delete(`/bookmarks/${idToRemove}`)
+          .expect(204)
+          .then(res =>
+            supertest(app)
+              .get(`/bookmarks`)
+              .expect(expectedBookmarks)
+          )
+      })
+    })
+  })
+})

@@ -9,9 +9,9 @@ const xss = require('xss')
 const sanitizeBookmark = (bookmark) => ({
   id: bookmark.id,
   title: xss(bookmark.title), // sanitize title
-  url: xss(bookmark.url), // sanitize content
+  url: xss(bookmark.url), // sanitize url
   rating: bookmark.rating,
-  description: xss(bookmark.description)
+  description: xss(bookmark.description) // sanitize description
 });
 
 bookmarksRouter
@@ -20,7 +20,12 @@ bookmarksRouter
     const knexInstance = req.app.get('db');
     BookmarksService.getAllBookmarks(knexInstance)
       .then(bookmarks => {
-        res.json(bookmarks);
+        // Make sure bookmarks that are sanitized of
+        // content that could be used for XSS attack
+        let xssSafeBookmarks = bookmarks.map(bookmark => sanitizeBookmark(bookmark));
+        // Bookmarks is safe to send now
+        // that its content is sanitized
+        res.json(xssSafeBookmarks);
       })
       .catch(next)
   })
@@ -46,7 +51,7 @@ bookmarksRouter
       })
       .catch(next)
 
-    if (!Number(rating) || rating < 0 || rating > 5) {
+    if (!Number(rating) || rating < 1 || rating > 5) {
       logger.error(`The rating must be a number, greater than 0, and less than 6.`)
       return res.status(400).send('Rating should be a number greater than 0 and less than 6');
     }
@@ -62,28 +67,35 @@ bookmarksRouter
 
 bookmarksRouter
   .route('/bookmarks/:id')
-  .get((req, res, next) => {
-    const knexInstance = req.app.get('db');
-    BookmarksService.getById(knexInstance, req.params.id)
+  .all((req, res, next) => {
+    BookmarksService.getById(
+      req.app.get('db'),
+      req.params.id
+    )
       .then(bookmark => {
         if (!bookmark) {
-          logger.error(`Bookmark with id ${req.params.id} was not found.`);
           return res.status(404).json({
-            error: { message: `Bookmark does not exist` }
+            error: { message: `Bookmark doesn't exist` }
           })
         }
-        res.json(bookmark)
+        res.bookmark = bookmark // save the bookmark for the next middleware
+        next() // don't forget to call next so the next middleware happens!
+      })
+      .catch(next)
+  })
+  .get((req, res, next) => {
+    res.json(sanitizeBookmark(res.bookmark))
+  })
+  .delete((req, res, next) => {
+    BookmarksService.deleteBookmark(
+      req.app.get('db'),
+      req.params.id
+    )
+      .then(() => {
+        res.status(204).end()
       })
       .catch(next)
   })
 
-  /* TODO: ADAPT THIS TO DELETE FROM DB INSTEAD OF JSON OBJECT */
-  .delete((req,res) => {
-    const { id } = req.params;
-    const bookmarks = store.findIndex(bookmark => bookmark.id == id);
-    store.splice(bookmarks, 1);
-    logger.info(`Bookmark with id ${id} deleted.`)
-    res.status(201).send('Bookmark deleted.')
-  })
 
 module.exports = bookmarksRouter;
